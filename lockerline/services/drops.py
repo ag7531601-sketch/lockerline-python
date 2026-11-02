@@ -1,11 +1,14 @@
-"""Parcel booking rules for Ticket 2."""
-from datetime import datetime
+"""Door choice, parcel, code and events are one transaction."""
+from datetime import timedelta, timezone
+import hashlib
+import hmac
 import re
+import secrets
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..clock import Clock
+from ..clock import Clock, as_utc
 from ..errors import NoDoorFree, NoSuchFlat, NoSuchTower
 from ..models import Door, Parcel, Resident, Tower
 from ..schemas import DropOut, DropRequest
@@ -14,10 +17,35 @@ SIZE_ORDER = ("S", "M", "L")
 
 
 def parcel_public_id(parcel_id: int) -> str:
+    """Convert an internal parcel ID to its public ID."""
     return f"P{parcel_id:03d}"
 
 
+def parse_parcel_id(value: str) -> int | None:
+    """Convert a public parcel ID such as P017 to integer 17."""
+    match = re.fullmatch(r"P(\d+)", value)
+    return int(match.group(1)) if match else None
+
+
+def hash_pickup_code(code: str, secret: str) -> str:
+    """Return a keyed SHA-256 digest; never persist the plaintext code."""
+    return hmac.new(
+        secret.encode("utf-8"),
+        code.encode("ascii"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def verify_pickup_code(code: str, stored_hash: str, secret: str) -> bool:
+    """Compare a supplied code with its stored hash in constant time."""
+    return hmac.compare_digest(
+        hash_pickup_code(code, secret),
+        stored_hash,
+    )
+
+
 def _tower(session: Session, code: str) -> Tower:
+    """Find a tower by its code."""
     tower = session.scalar(select(Tower).where(Tower.code == code))
     if tower is None:
         raise NoSuchTower(f"There is no tower {code!r}")
@@ -25,17 +53,45 @@ def _tower(session: Session, code: str) -> Tower:
 
 
 def _free_sizes(session: Session, tower_id: int) -> list[str]:
+    """Return available door sizes in S, M, L order."""
     rows = session.scalars(
         select(Door.size_class)
-        .where(Door.tower_id == tower_id, Door.current_parcel_id.is_(None))
+        .where(
+            Door.tower_id == tower_id,
+            Door.current_parcel_id.is_(None),
+        )
         .distinct()
     )
     found = set(rows)
     return [size for size in SIZE_ORDER if size in found]
 
 
-def create_drop(session: Session, request: DropRequest, clock: Clock, tower_code: str = "A") -> DropOut:
-    """Validate first, then save parcel and door assignment in one transaction."""
+def _new_unique_code(session: Session, secret: str) -> tuple[str, str]:
+    """Generate a six-digit code and its unique stored hash."""
+    existing_hashes = set(
+        session.scalars(
+            select(Parcel.code_hash).where(Parcel.code_used_at.is_(None))
+        )
+    )
+
+    for _ in range(100):
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        digest = hash_pickup_code(code, secret)
+        if digest not in existing_hashes:
+            return code, digest
+
+    raise RuntimeError("Could not generate a unique pickup code")
+
+
+def create_drop(
+    session: Session,
+    request: DropRequest,
+    clock: Clock,
+    free_window_hours: int = 48,
+    code_secret: str = "development-only-change-this-secret",
+    tower_code: str = "A",
+) -> DropOut:
+    """Validate and save the parcel and door assignment in one transaction."""
     try:
         tower = _tower(session, tower_code)
 
@@ -64,8 +120,10 @@ def create_drop(session: Session, request: DropRequest, clock: Clock, tower_code
                 free_sizes=_free_sizes(session, tower.id),
             )
 
-        # Stamp the time once; the response and database use the same value.
-        dropped_at = clock.now()
+        dropped_at = as_utc(clock.now()).astimezone(timezone.utc)
+        expires_at = dropped_at + timedelta(hours=free_window_hours)
+        code, code_hash = _new_unique_code(session, code_secret)
+
         parcel = Parcel(
             tower_id=tower.id,
             flat=request.flat,
@@ -73,11 +131,13 @@ def create_drop(session: Session, request: DropRequest, clock: Clock, tower_code
             door_id=door.id,
             state="holding",
             dropped_at=dropped_at,
+            code_hash=code_hash,
+            code_expires_at=expires_at,
+            code_used_at=None,
         )
         session.add(parcel)
-        session.flush()  # obtain parcel.id before linking it to the door
+        session.flush()
 
-        # Set the door only after the parcel insert succeeded.
         door.current_parcel_id = parcel.id
         session.commit()
 
@@ -87,14 +147,9 @@ def create_drop(session: Session, request: DropRequest, clock: Clock, tower_code
             size_class=parcel.size_class,
             flat=parcel.flat,
             dropped_at=dropped_at,
+            code=code,
+            expires_at=expires_at,
         )
     except Exception:
-        # Also handles failures injected after flush: neither row nor door link remains.
         session.rollback()
         raise
-
-
-def parse_parcel_id(value: str) -> int | None:
-    """Accept public IDs such as P017; malformed IDs simply cannot match a parcel."""
-    match = re.fullmatch(r"P(\d+)", value)
-    return int(match.group(1)) if match else None

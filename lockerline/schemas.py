@@ -1,4 +1,3 @@
-
 """Request and response models. Every response goes through one of these.
 Optional fields are left out of the body when they have no value (the routes use response_model_exclude_none)."""
 from datetime import datetime, timezone
@@ -31,6 +30,8 @@ class DropOut(BaseModel):
     size_class: SizeClass
     flat: str
     dropped_at: UtcZ
+    code: str = Field(pattern=r"^\d{6}$")
+    expires_at: UtcZ
 
 
 class ParcelOut(BaseModel):
