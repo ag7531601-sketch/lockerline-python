@@ -1,3 +1,4 @@
+
 """Request and response models. Every response goes through one of these.
 Optional fields are left out of the body when they have no value (the routes use response_model_exclude_none)."""
 from datetime import datetime, timezone
@@ -17,6 +18,28 @@ def _iso_z(dt: datetime) -> str:
 
 
 UtcZ = Annotated[datetime, PlainSerializer(_iso_z, return_type=str)]
+
+
+class DropRequest(BaseModel):
+    size_class: SizeClass
+    flat: str = Field(min_length=1, max_length=8, pattern=r"^\d+$")
+
+
+class DropOut(BaseModel):
+    parcel_id: str
+    door: str
+    size_class: SizeClass
+    flat: str
+    dropped_at: UtcZ
+
+
+class ParcelOut(BaseModel):
+    parcel_id: str
+    door: str
+    size_class: SizeClass
+    flat: str
+    state: Literal["holding", "collected"]
+    dropped_at: UtcZ
 
 
 class DoorListItem(BaseModel):

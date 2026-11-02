@@ -1,5 +1,5 @@
-"""Routes parse and delegate; they hold no rules. The request-scoped dependencies
-(session, clock) are declared here so the services never see the web framework."""
+"""Engine, sessions and the database dependency. SQLite; the schema is created at start-up."""
+"""Dependencies for the routers."""
 from typing import Annotated
 
 from fastapi import Depends

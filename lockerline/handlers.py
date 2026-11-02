@@ -1,8 +1,8 @@
+
 """The one place that turns every error into application/problem+json.
 
 Services raise the exceptions in errors.py; routes never build error responses; the handlers below map them.
 """
-
 from http import HTTPStatus
 
 from fastapi import FastAPI, Request
@@ -43,15 +43,3 @@ def install_handlers(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def _framework(request: Request, exc: StarletteHTTPException):
         """Errors raised by the framework itself (no such route, wrong method) get the same shape."""
-        headers = dict(exc.headers) if exc.headers else None
-        if exc.status_code == 404:
-            status, type_, title = NOT_FOUND
-            return problem(status, type_, title, f"Nothing is served at {request.url.path}", headers)
-        if exc.status_code == 405:
-            status, type_, title = METHOD_NOT_ALLOWED
-            return problem(status, type_, title, f"{request.method} is not allowed on {request.url.path}", headers)
-        try:
-            phrase = HTTPStatus(exc.status_code).phrase
-        except ValueError:
-            phrase = "HTTP error"
-        return problem(exc.status_code, HTTP, phrase, str(exc.detail), headers)

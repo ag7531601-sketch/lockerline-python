@@ -1,5 +1,3 @@
-"""The clock is a dependency: every time-based rule reads it, so a test can move time instead of waiting."""
-
 """Time-source abstractions for the application and tests."""
 from datetime import datetime, timedelta, timezone
 

@@ -1,6 +1,5 @@
 """The application: settings read once, the schema created and seeded before the first request, routers mounted,
 one error handler."""
-
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -11,6 +10,8 @@ from fastapi.staticfiles import StaticFiles
 from .db import init_db, make_engine, make_sessionmaker
 from .handlers import install_handlers
 from .routers import doors
+from .routers import drops as drops_router
+from .routers import parcels as parcels_router
 from .services.seed import seed
 from .settings import Settings
 
@@ -28,14 +29,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         yield
         engine.dispose()
 
-    app = FastAPI(title="LockerLine", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="LockerLine", version="0.2.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.engine = engine
     app.state.sessionmaker = make_sessionmaker(engine)
     
     install_handlers(app)
-    for r in (doors.router,):
-        app.include_router(r)
+    for router in (doors.router, drops_router.router, parcels_router.router):
+        app.include_router(router)
+
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
@@ -44,6 +46,3 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return FileResponse(STATIC / "index.html")
 
     return app
-
-
-app = create_app()
