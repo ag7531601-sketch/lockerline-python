@@ -38,6 +38,18 @@ class NoSuchParcel(DomainError):
     status, type, title = 404, "/errors/no-such-parcel", "No such parcel"
 
 
+class NoSuchCode(DomainError):
+    status, type, title = 404, "/errors/no-such-code", "No such code"
+
+
+class CodeExpired(DomainError):
+    status, type, title = 404, "/errors/code-expired", "Code has expired"
+
+
+class CodeUsed(DomainError):
+    status, type, title = 409, "/errors/code-used", "Code has already been used"
+
+
 # (status, type, title) of the errors that are not domain refusals
 
 VALIDATION_BODY = (422, "/errors/validation", "The request body is not valid")

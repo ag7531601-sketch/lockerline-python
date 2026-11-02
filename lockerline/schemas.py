@@ -34,6 +34,17 @@ class DropOut(BaseModel):
     expires_at: UtcZ
 
 
+class PickupRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class PickupOut(BaseModel):
+    parcel_id: str
+    door: str
+    opened_at: UtcZ
+    dwell_seconds: int
+
+
 class ParcelOut(BaseModel):
     parcel_id: str
     door: str
