@@ -10,7 +10,7 @@ EventKind = Literal["dropped", "code_issued", "opened"]
 
 
 def _iso_z(dt: datetime) -> str:
-    """SQLite hands naive datetimes back; everything the app stores is UTC, so a naive value is UTC, never local time."""
+    """SQLite hands naive datetimes back; everything stored is UTC."""
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -46,8 +46,7 @@ class PickupOut(BaseModel):
 
 
 class EventOut(BaseModel):
-    """One line of a parcel's history. `door` on dropped and opened, `expires_at` on code_issued,
-    `dwell_seconds` on opened — the facts the event row stores, never the code or a name."""
+    """One line of a parcel's history."""
     model_config = ConfigDict(extra="forbid")
 
     at: UtcZ
@@ -68,7 +67,6 @@ class ParcelOut(BaseModel):
 
 
 class DoorListItem(BaseModel):
-    """One cell of the wall. A free door carries only no, size and state; a holding door adds its parcel and dwell."""
     no: str
     size: SizeClass
     state: DoorState
@@ -77,7 +75,6 @@ class DoorListItem(BaseModel):
 
 
 class DoorOut(DoorListItem):
-    """One door, read on its own: a holding door also names the flat its parcel is for."""
     flat: str | None = None
 
 
@@ -85,3 +82,12 @@ class DoorsOut(BaseModel):
     tower: str
     free: int = Field(description="How many of the doors in this answer (after the filters) are free")
     doors: list[DoorListItem]
+
+
+class SettingsOut(BaseModel):
+    free_window_hours: int
+    sizes: list[SizeClass] = Field(default_factory=lambda: ["S", "M", "L"])
+
+
+class HealthOut(BaseModel):
+    status: Literal["ok"]

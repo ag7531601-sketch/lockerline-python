@@ -1,6 +1,4 @@
 """A drop takes exactly one door in one transaction; 400 vs 422 vs 409."""
-"""A drop takes exactly one door in one transaction; 400 vs 422 vs 409."""
-"""A drop takes exactly one door in one transaction; 400 vs 422 vs 409."""
 from sqlalchemy import func, select, text
 
 from lockerline.models import Door, Parcel
@@ -16,6 +14,16 @@ def test_drop_takes_lowest_free_door_of_exact_size(client, db):
         door = s.scalar(select(Door).where(Door.no == "D21"))
         assert door.current_parcel_id is not None
     assert drop(client, "M", "302")["door"] == "D22"
+
+
+def test_drop_issues_six_digit_code_and_expiry(client, db):
+    body = drop(client, "S", "101")
+    assert "code" in body and len(body["code"]) == 6 and body["code"].isdigit()
+    assert body["expires_at"] == "2026-09-27T13:10:00Z"
+    with db() as s:
+        parcel = s.scalar(select(Parcel).where(Parcel.id == 1))
+        assert parcel.code_hash != body["code"]
+        assert len(parcel.code_hash) == 64
 
 
 def test_location_header_points_at_the_parcel(client):

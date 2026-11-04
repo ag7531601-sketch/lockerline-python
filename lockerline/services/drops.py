@@ -18,35 +18,25 @@ SIZE_ORDER = ("S", "M", "L")
 
 
 def parcel_public_id(parcel_id: int) -> str:
-    """Convert an internal parcel ID to its public ID."""
     return f"P{parcel_id:03d}"
 
 
 def parse_parcel_id(value: str) -> int | None:
-    """Convert a public parcel ID such as P017 to integer 17."""
     match = re.fullmatch(r"P(\d+)", value)
     return int(match.group(1)) if match else None
 
 
 def hash_pickup_code(code: str, secret: str) -> str:
     """Return a keyed SHA-256 digest; never persist the plaintext code."""
-    return hmac.new(
-        secret.encode("utf-8"),
-        code.encode("ascii"),
-        hashlib.sha256,
-    ).hexdigest()
+    return hmac.new(secret.encode("utf-8"), code.encode("ascii"), hashlib.sha256).hexdigest()
 
 
 def verify_pickup_code(code: str, stored_hash: str, secret: str) -> bool:
-    """Compare a supplied code with its stored hash in constant time."""
-    return hmac.compare_digest(
-        hash_pickup_code(code, secret),
-        stored_hash,
-    )
+    """Compare a supplied code with its hash in constant time."""
+    return hmac.compare_digest(hash_pickup_code(code, secret), stored_hash)
 
 
 def _tower(session: Session, code: str) -> Tower:
-    """Find a tower by its code."""
     tower = session.scalar(select(Tower).where(Tower.code == code))
     if tower is None:
         raise NoSuchTower(f"There is no tower {code!r}")
@@ -54,13 +44,9 @@ def _tower(session: Session, code: str) -> Tower:
 
 
 def _free_sizes(session: Session, tower_id: int) -> list[str]:
-    """Return available door sizes in S, M, L order."""
     rows = session.scalars(
         select(Door.size_class)
-        .where(
-            Door.tower_id == tower_id,
-            Door.current_parcel_id.is_(None),
-        )
+        .where(Door.tower_id == tower_id, Door.current_parcel_id.is_(None))
         .distinct()
     )
     found = set(rows)
@@ -68,19 +54,14 @@ def _free_sizes(session: Session, tower_id: int) -> list[str]:
 
 
 def _new_unique_code(session: Session, secret: str) -> tuple[str, str]:
-    """Generate a six-digit code and its unique stored hash."""
     existing_hashes = set(
-        session.scalars(
-            select(Parcel.code_hash).where(Parcel.code_used_at.is_(None))
-        )
+        session.scalars(select(Parcel.code_hash).where(Parcel.code_used_at.is_(None)))
     )
-
     for _ in range(100):
         code = f"{secrets.randbelow(1_000_000):06d}"
         digest = hash_pickup_code(code, secret)
         if digest not in existing_hashes:
             return code, digest
-
     raise RuntimeError("Could not generate a unique pickup code")
 
 
@@ -95,7 +76,6 @@ def create_drop(
     """Validate and save the parcel and door assignment in one transaction."""
     try:
         tower = _tower(session, tower_code)
-
         resident = session.scalar(
             select(Resident).where(
                 Resident.tower_id == tower.id,
@@ -141,7 +121,14 @@ def create_drop(
 
         door.current_parcel_id = parcel.id
         events.record(session, tower.id, parcel.id, "dropped", dropped_at, {"door": door.no})
-        events.record(session, tower.id, parcel.id, "code_issued", dropped_at, {"expires_at": expires_at.strftime("%Y-%m-%dT%H:%M:%SZ")})
+        events.record(
+            session,
+            tower.id,
+            parcel.id,
+            "code_issued",
+            dropped_at,
+            {"expires_at": expires_at.strftime("%Y-%m-%dT%H:%M:%SZ")},
+        )
         session.commit()
 
         return DropOut(

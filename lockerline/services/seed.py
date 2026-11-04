@@ -18,14 +18,23 @@ def seed(session: Session, seed_dir: str) -> None:
         tower = Tower(code="A", name="Tower A")
         session.add(tower)
         session.flush()
+
     if session.scalar(select(Door.id).where(Door.tower_id == tower.id).limit(1)) is None:
-        with (root / "doors.csv").open(newline="", encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                session.add(Door(tower_id=tower.id, no=row["no"], size_class=row["size_class"]))
+        with (root / "doors.csv").open(newline="", encoding="utf-8") as file:
+            for row in csv.DictReader(file):
+                session.add(
+                    Door(tower_id=tower.id, no=row["no"], size_class=row["size_class"])
+                )
+
     if session.scalar(select(Resident.id).where(Resident.tower_id == tower.id).limit(1)) is None:
-        with (root / "residents.csv").open(newline="", encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                session.add(Resident(tower_id=tower.id, flat=row["flat"], name=row["name"]))
+        with (root / "residents.csv").open(newline="", encoding="utf-8") as file:
+            for row in csv.DictReader(file):
+                session.add(
+                    Resident(tower_id=tower.id, flat=row["flat"], name=row["name"])
+                )
+
     session.commit()
-    doors = session.scalar(select(Door.id).where(Door.tower_id == tower.id).limit(1))
-    log.info("seed complete tower=%s doors_present=%s", tower.code, doors is not None)
+    doors_present = session.scalar(
+        select(Door.id).where(Door.tower_id == tower.id).limit(1)
+    )
+    log.info("seed complete tower=%s doors_present=%s", tower.code, doors_present is not None)

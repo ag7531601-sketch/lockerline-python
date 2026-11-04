@@ -11,7 +11,11 @@ from .drops import hash_pickup_code
 
 
 def pickup(
-    session: Session, request: PickupRequest, clock: Clock, code_secret: str, tower_code: str = "A"
+    session: Session,
+    request: PickupRequest,
+    clock: Clock,
+    code_secret: str,
+    tower_code: str = "A",
 ) -> tuple[Parcel, Door]:
     try:
         tower = session.scalar(select(Tower).where(Tower.code == tower_code))
@@ -19,7 +23,6 @@ def pickup(
             raise NoSuchTower(f"There is no tower {tower_code!r}")
 
         submitted_hash = hash_pickup_code(request.code, code_secret)
-        # Prefer an uncollected parcel if a code was reused
         parcel = session.scalar(
             select(Parcel)
             .where(Parcel.tower_id == tower.id, Parcel.code_hash == submitted_hash)
@@ -45,7 +48,14 @@ def pickup(
         parcel.dwell_seconds = dwell
         parcel.code_used_at = now
         door.current_parcel_id = None
-        events.record(session, parcel.tower_id, parcel.id, "opened", now, {"door": door.no, "dwell_seconds": dwell})
+        events.record(
+            session,
+            parcel.tower_id,
+            parcel.id,
+            "opened",
+            now,
+            {"door": door.no, "dwell_seconds": dwell},
+        )
         session.commit()
         return parcel, door
     except Exception:

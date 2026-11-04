@@ -17,11 +17,14 @@ def get_parcel(session: Session, public_id: str) -> ParcelOut:
         raise NoSuchParcel(f"Parcel {public_id!r} does not exist")
 
     door = session.get(Door, parcel.door_id)
-    # A valid parcel should always point to a door.
     if door is None:
         raise NoSuchParcel(f"Parcel {public_id!r} does not exist")
 
-    rows = session.scalars(select(Event).where(Event.parcel_id == parcel.id).order_by(Event.at, Event.id))
+    rows = session.scalars(
+        select(Event)
+        .where(Event.parcel_id == parcel.id)
+        .order_by(Event.at, Event.id)
+    )
     events = [EventOut(at=row.at, kind=row.kind, **json.loads(row.data)) for row in rows]
 
     return ParcelOut(

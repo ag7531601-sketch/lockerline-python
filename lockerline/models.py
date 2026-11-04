@@ -23,7 +23,7 @@ class Door(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tower_id: Mapped[int] = mapped_column(ForeignKey("towers.id"))
     no: Mapped[str] = mapped_column(String(8))
-    size_class: Mapped[str] = mapped_column(String(1))            # S | M | L
+    size_class: Mapped[str] = mapped_column(String(1))
     current_parcel_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
@@ -42,9 +42,9 @@ class Parcel(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tower_id: Mapped[int] = mapped_column(ForeignKey("towers.id"))
     flat: Mapped[str] = mapped_column(String(8))
-    size_class: Mapped[str] = mapped_column(String(1))           # S | M | L
+    size_class: Mapped[str] = mapped_column(String(1))
     door_id: Mapped[int] = mapped_column(ForeignKey("doors.id"))
-    state: Mapped[str] = mapped_column(String(12))                # holding | collected
+    state: Mapped[str] = mapped_column(String(12))
     dropped_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     code_hash: Mapped[str] = mapped_column(String(64))
     code_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -60,6 +60,6 @@ class Event(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tower_id: Mapped[int] = mapped_column(ForeignKey("towers.id"))
     parcel_id: Mapped[int] = mapped_column(ForeignKey("parcels.id"))
-    kind: Mapped[str] = mapped_column(String(16))  # dropped | code_issued | opened
+    kind: Mapped[str] = mapped_column(String(16))
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     data: Mapped[str] = mapped_column(Text, default="{}")

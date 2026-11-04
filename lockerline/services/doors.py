@@ -32,14 +32,22 @@ def _dwell_seconds(parcel: Parcel, clock: Clock) -> int:
     return max(0, int((as_utc(clock.now()) - as_utc(parcel.dropped_at)).total_seconds()))
 
 
-def list_doors(session: Session, tower_code: str, size: str | None, state: str | None, clock: Clock) -> DoorsOut:
+def list_doors(
+    session: Session,
+    tower_code: str,
+    size: str | None,
+    state: str | None,
+    clock: Clock,
+) -> DoorsOut:
     tower = get_tower(session, tower_code)
     query = select(Door).where(Door.tower_id == tower.id).order_by(Door.no)
     if size is not None:
         query = query.where(Door.size_class == size)
+
     doors = list(session.scalars(query))
     if state is not None:
         doors = [door for door in doors if door_state(door) == state]
+
     items = []
     for door in doors:
         parcel = _parcel_for_door(session, door)
