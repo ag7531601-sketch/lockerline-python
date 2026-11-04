@@ -53,13 +53,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def read_settings() -> SettingsOut:
         return SettingsOut(free_window_hours=settings.free_window_hours)
 
-    @app.get(
-        "/healthz",
-        response_model=HealthOut,
-        tags=["runtime"],
-        summary="Check app and database availability",
-        responses={500: INTERNAL},
-    )
+    @app.get("/healthz", response_model=HealthOut, tags=["runtime"],
+             summary="Check app and database availability", responses={500: INTERNAL})
     def health() -> HealthOut:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
@@ -68,20 +63,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def openapi_schema():
         if app.openapi_schema:
             return app.openapi_schema
-
         schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
-
-        # Invalid door query enums are deliberately 400; FastAPI's generated 422
-        # would misrepresent the handler's behavior.
+        # Invalid door query enums are deliberately 400 (the same validation contract
+        # used by the handler); FastAPI's default generated 422 would be misleading.
         schema["paths"]["/towers/{tower}/doors"]["get"]["responses"].pop("422", None)
-
-        # These path values are strings with domain-specific not-found responses.
+        # Path values are strings with domain-specific not-found responses, so the
+        # generic framework 422s FastAPI infers for these operations are not possible.
         for path, method in (
             ("/towers/{tower}/doors/{no}", "get"),
             ("/parcels/{parcel_id}", "get"),
         ):
             schema["paths"][path][method]["responses"].pop("422", None)
-
         app.openapi_schema = schema
         return schema
 
@@ -96,14 +88,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception:
             log.exception("request method=%s path=%s status=500", request.method, request.url.path)
             raise
-
-        log.info(
-            "request method=%s path=%s status=%s duration_ms=%.1f",
-            request.method,
-            request.url.path,
-            response.status_code,
-            (perf_counter() - started) * 1000,
-        )
+        log.info("request method=%s path=%s status=%s duration_ms=%.1f", request.method,
+                 request.url.path, response.status_code, (perf_counter() - started) * 1000)
         response.headers["X-Request-ID"] = request.state.request_id
         return response
 
