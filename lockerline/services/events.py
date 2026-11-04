@@ -37,6 +37,6 @@ def record(
         "event kind=%s parcel_id=%s %s",
         kind,
         parcel_public(parcel_id),
-        " ".join(f"{k}={v}" for k, v in facts.items()),
+        " ".join(f"{key}={value}" for key, value in facts.items()),
     )
     return event_id

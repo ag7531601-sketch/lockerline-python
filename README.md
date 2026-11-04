@@ -4,7 +4,16 @@ Build and start the app with Docker:
 
 ```bash
 docker build -t lockerline .
-docker run -p 8080:8080 lockerline
+# Quick run without persistent storage:
+# docker run -p 8080:8080 lockerline
+# Copy .env.example to .env and set CODE_HASH_KEY before the persistent run:
+docker run -d --name lockerline -p 8080:8080 -v lockerline-data:/data --env-file .env lockerline
+# Create a parcel and note the returned parcel_id and six-digit code:
+curl -i -X POST http://127.0.0.1:8080/drops -H "Content-Type: application/json" -d '{"size_class":"M","flat":"302"}'
+# Replace P001 with the parcel_id returned by the drop:
+curl http://127.0.0.1:8080/parcels/P001
+# Replace 482913 with the code returned by the drop:
+curl -i -X POST http://127.0.0.1:8080/pickups -H "Content-Type: application/json" -d '{"code":"482913"}'
 
 <!-- learntube:start -->
 ---
@@ -22,7 +31,7 @@ docker run -p 8080:8080 lockerline
 - [x] Ticket 7 · One file becomes an app
 - [x] Ticket 8 · The rule table, and then the rule changes
 - [x] Ticket 9 · It runs on a machine that isn't yours
-- [ ] Ticket 10 · It survives being switched off
+- [x] Ticket 10 · It survives being switched off
 
 Built by Avinash Gupta on [LearnTube Guided Projects](https://guidedprojects.learntube.ai).
 <!-- learntube:end -->

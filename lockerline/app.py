@@ -3,6 +3,7 @@ one error handler."""
 from contextlib import asynccontextmanager
 import logging
 from pathlib import Path
+import sys
 from time import perf_counter
 from uuid import uuid4
 
@@ -25,7 +26,31 @@ from .settings import Settings
 
 STATIC = Path(__file__).parent / "static"
 log = logging.getLogger("lockerline.access")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+app_logger = logging.getLogger("lockerline")
+app_logger.setLevel(logging.INFO)
+
+# Send LockerLine logs to stdout and remove file handlers from its loggers.
+for named_logger in (
+    logging.getLogger(),
+    logging.getLogger("lockerline"),
+    logging.getLogger("lockerline.access"),
+    logging.getLogger("lockerline.events"),
+):
+    for handler in tuple(named_logger.handlers):
+        if isinstance(handler, logging.FileHandler):
+            named_logger.removeHandler(handler)
+            handler.close()
+
+if not any(
+    isinstance(handler, logging.StreamHandler)
+    and not isinstance(handler, logging.FileHandler)
+    for handler in app_logger.handlers
+):
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+    )
+    app_logger.addHandler(stream_handler)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -46,15 +71,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.sessionmaker = make_sessionmaker(engine)
 
     install_handlers(app)
-    for router in (doors.router, drops_router.router, parcels_router.router, pickups_router.router):
+    for router in (
+        doors.router,
+        drops_router.router,
+        parcels_router.router,
+        pickups_router.router,
+    ):
         app.include_router(router)
 
-    @app.get("/settings", response_model=SettingsOut, tags=["runtime"], summary="Read active locker policy")
+    @app.get(
+        "/settings",
+        response_model=SettingsOut,
+        tags=["runtime"],
+        summary="Read active locker policy",
+    )
     def read_settings() -> SettingsOut:
         return SettingsOut(free_window_hours=settings.free_window_hours)
 
-    @app.get("/healthz", response_model=HealthOut, tags=["runtime"],
-             summary="Check app and database availability", responses={500: INTERNAL})
+    @app.get(
+        "/healthz",
+        response_model=HealthOut,
+        tags=["runtime"],
+        summary="Check app and database availability",
+        responses={500: INTERNAL},
+    )
     def health() -> HealthOut:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
@@ -63,17 +103,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def openapi_schema():
         if app.openapi_schema:
             return app.openapi_schema
-        schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
-        # Invalid door query enums are deliberately 400 (the same validation contract
-        # used by the handler); FastAPI's default generated 422 would be misleading.
-        schema["paths"]["/towers/{tower}/doors"]["get"]["responses"].pop("422", None)
-        # Path values are strings with domain-specific not-found responses, so the
-        # generic framework 422s FastAPI infers for these operations are not possible.
+
+        schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            routes=app.routes,
+        )
+        schema["paths"]["/towers/{tower}/doors"]["get"]["responses"].pop(
+            "422", None
+        )
+
         for path, method in (
             ("/towers/{tower}/doors/{no}", "get"),
             ("/parcels/{parcel_id}", "get"),
         ):
             schema["paths"][path][method]["responses"].pop("422", None)
+
         app.openapi_schema = schema
         return schema
 
@@ -83,13 +128,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def log_request(request, call_next):
         request.state.request_id = uuid4().hex
         started = perf_counter()
-        try:
-            response = await call_next(request)
-        except Exception:
-            log.exception("request method=%s path=%s status=500", request.method, request.url.path)
-            raise
-        log.info("request method=%s path=%s status=%s duration_ms=%.1f", request.method,
-                 request.url.path, response.status_code, (perf_counter() - started) * 1000)
+        response = await call_next(request)
+
+        log.info(
+            "request method=%s path=%s status=%s duration_ms=%.1f",
+            request.method,
+            request.url.path,
+            response.status_code,
+            (perf_counter() - started) * 1000,
+        )
         response.headers["X-Request-ID"] = request.state.request_id
         return response
 
